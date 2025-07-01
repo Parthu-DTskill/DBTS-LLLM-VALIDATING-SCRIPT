@@ -70,7 +70,7 @@ class DBTSClient:
             if not Path(file_path).exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
             with open(file_path, "rb") as f:
-                files = {"file": (Path(file_path).name, f, "application/pdf")}
+                files = {"file": f}
                 data = {"name": name}
                 headers = {
                     'X-Frontend-Domain': self.domain,
@@ -125,7 +125,7 @@ if __name__ == "__main__":
 
     client.get_or_create_document(
         name="DBTS_Testing_Document1",
-        file_path=r"C:\Users\parth\Documents\Downloads\Sets - Assignments.pdf"
+        file_path=r"C:\\Users\\parth\\Documents\\Downloads\\Sets - Assignments.pdf"
     )
 
     client.get_or_create_scenario(
