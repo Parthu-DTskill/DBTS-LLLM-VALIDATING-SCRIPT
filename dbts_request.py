@@ -16,7 +16,7 @@ class DBTSClient:
         self.scenario_id = None
 
     def make_api_request(self, request_method, api_name, payload=None, custom_url=None):
-        url = custom_url if custom_url else self.API_ENDPOINTS[api_name]
+        url = custom_url if custom_url else self.API_ENDPOINTS.get(api_name)
         headers = {
             'X-Frontend-Domain': 'https://vistaai-dev.dtskill.com',
             'Content-Type': 'application/json'
@@ -25,15 +25,20 @@ class DBTSClient:
             headers['X-Cluster-ID'] = '5b1d38d4-27a6-4baf-8dc1-7ed60f2be00d'
             headers['Authorization'] = f"Bearer {self.token}"
 
-        if request_method.upper() == "GET":
-            response = requests.request(url=url, method=request_method, headers=headers)
-        else:
-            data = json.dumps(payload) if payload else None
-            print(f"payload for {api_name} is {data}")
-            response = requests.request(url=url, method=request_method, headers=headers, data=data)
+        try:
+            if request_method.upper() == "GET":
+                response = requests.request(url=url, method=request_method, headers=headers)
+            else:
+                data = json.dumps(payload) if payload else None
+                print(f"payload for {api_name if api_name else custom_url} is {data}")
+                response = requests.request(url=url, method=request_method, headers=headers, data=data)
 
-        print(f"Response for {api_name}: {response.text}")
-        return response.json()
+            response.raise_for_status()
+            print(f"Response for {api_name if api_name else custom_url}: {response.text}")
+            return response.json()
+        except Exception as e:
+            print(f"API request failed: {e}")
+            return {}
 
     def login(self, email, password):
         payload = {
@@ -59,15 +64,16 @@ class DBTSClient:
             payload = {
                 "name": name,
                 "prompt": scenario_prompt,
-                "document": self.document_id,  # Associate scenario with document
-                "support_type": "Chat",        # Adjust fields as required by your API
+                "document": self.document_id,
+                "support_type": "Chat",
                 "scorecard": "13f82a6e-4166-4bb5-9c79-fe51c6082ad6"
             }
             scenario = self.make_api_request("POST", "scenario_create", payload)
             self.scenario_id = scenario.get("id")
 
-    def scenario_add_user(self, user_list=["bd7b16ed-4f14-4949-88d1-c013d8e27f21"]):
-        # Assign users to a scenario in DBTS
+    def scenario_add_user(self, user_list=None):
+        if user_list is None:
+            user_list = ["bd7b16ed-4f14-4949-88d1-c013d8e27f21"]
         url = f"https://vistaai-dev-api.dtskill.com/api/vista_ai_services/dbts/scenario/{self.scenario_id}/assign-users/"
         payload = {
             "users": user_list,
