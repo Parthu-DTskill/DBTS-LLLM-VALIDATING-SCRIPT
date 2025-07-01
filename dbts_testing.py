@@ -4,7 +4,7 @@ from opik import Opik, track
 from opik.evaluation import evaluate
 from opik.evaluation.metrics import Equals, Hallucination, AnswerRelevance, Moderation
 from opik.integrations.openai import track_openai
-from custom_models import GenericCompatibleModel
+from custom_modules import GenericCompatibleModel
 from datetime import datetime
 from langchain_community.agent_toolkits import SQLDatabaseToolkit, SparkSQLToolkit
 
