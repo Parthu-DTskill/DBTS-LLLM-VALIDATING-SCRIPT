@@ -4,7 +4,9 @@ import logging
 from pathlib import Path
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s | %(levelname)s | %(message)s')
+
 
 class DBTSClient:
     API_ENDPOINTS = {
@@ -38,7 +40,8 @@ class DBTSClient:
                 method=method.upper(),
                 url=url,
                 headers=headers,
-                data=json.dumps(payload) if payload and method.upper() != "GET" else None
+                data=json.dumps(
+                    payload) if payload and method.upper() != "GET" else None
             )
             response.raise_for_status()
             logging.info(f"{api_name or url} - {response.status_code}")
@@ -60,51 +63,62 @@ class DBTSClient:
     def get_or_create_document(self, name, file_path):
         logging.info(f"Checking for document: {name}")
         documents = self.make_api_request("GET", "documents_list")
-        matching_doc = next((doc for doc in documents if doc["name"] == name), None)
+        matching_doc = next(
+            (doc for doc in documents if doc["name"] == name), None)
 
         if matching_doc:
             self.document_id = matching_doc["id"]
-            logging.info(f"Document already exists with ID: {self.document_id}")
+            logging.info(
+                f"Document already exists with ID: {self.document_id}")
         else:
             logging.info("Uploading new document...")
             if not Path(file_path).exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
             with open(file_path, "rb") as f:
-                files = {"file": f}
+                files = {"document": f}
                 data = {"name": name}
                 headers = {
                     'X-Frontend-Domain': self.domain,
                     'X-Cluster-ID': self.cluster_id,
                     'Authorization': f"Bearer {self.token}"
                 }
-                response = requests.post(self.API_ENDPOINTS["document_create"], headers=headers, files=files, data=data)
-                print("Document upload response:", response.text) 
+                response = requests.post(
+                    self.API_ENDPOINTS["document_create"], headers=headers, files=files, data=data)
+                logging.info("Document upload response: %s", response.text)
                 response.raise_for_status()
-                created_doc = response.json()
+                created_doc = response.json()["document"]
                 self.document_id = created_doc.get("id")
                 logging.info(f"Document created with ID: {self.document_id}")
 
     def get_or_create_scenario(self, name="Python_Tutorials_1", number_of_questions=3, score_per_question=2):
         logging.info(f"Checking for scenario: {name}")
         scenarios = self.make_api_request("GET", "scenarios_list")
-        matching_scenario = next((s for s in scenarios if s["name"] == name), None)
+        matching_scenario = next(
+            (s for s in scenarios if s["name"] == name), None)
 
         if matching_scenario:
             self.scenario_id = matching_scenario["id"]
-            logging.info(f"Scenario already exists with ID: {self.scenario_id}")
+            logging.info(
+                f"Scenario already exists with ID: {self.scenario_id}")
         else:
             logging.info("Creating new scenario...")
             payload = {
                 "name": name,
-                "document": self.document_id,
+                "document_id": self.document_id,
                 "number_of_questions": number_of_questions,
                 "score_per_question": score_per_question,
-                "topics": [],
+                "topics": ["machine learning", "popular algorithms"],
                 "scenario_type": "multiple_choice",
-                "level": "Default"
+                "level": "intermediate"
             }
+
             created = self.make_api_request("POST", "scenario_create", payload)
-            self.scenario_id = created.get("id")
+            if not created or "scenario" not in created:
+                logging.error(
+                    "Scenario creation failed. Response: %s", created)
+                raise Exception(
+                    "Failed to create scenario. Check payload or server.")
+            self.scenario_id = created["scenario"]["id"]
             logging.info(f"Scenario created with ID: {self.scenario_id}")
 
     def assign_users_to_scenario(self, user_list):
@@ -113,23 +127,25 @@ class DBTSClient:
             raise ValueError("Document or Scenario not initialized.")
         url = f"https://vistaai-dev-api.dtskill.com/api/vista_ai_services/dbts/scenario/{self.scenario_id}/assign-users/"
         payload = {
-            "users": user_list,
+            "user_ids": user_list,
             "document_id": self.document_id
         }
         self.make_api_request("POST", "", payload, custom_url=url)
         logging.info("Users assigned to scenario.")
 
+
+# dbts_request.py
 if __name__ == "__main__":
     client = DBTSClient()
     client.login(email="vistadevsa@yopmail.com", password="india@dec1225")
 
     client.get_or_create_document(
-        name="DBTS_Testing_Document1",
-        file_path=r"C:\\Users\\parth\\Documents\\Downloads\\Sets - Assignments.pdf"
+        name="DBTS_Testing_Document100",
+        file_path=r"C:\\Users\\parth\Desktop\\Machine Learning.pdf"
     )
 
     client.get_or_create_scenario(
-        name="Python_Tutorials_1",
+        name="Python_Tutorials_100",
         number_of_questions=3,
         score_per_question=2
     )
