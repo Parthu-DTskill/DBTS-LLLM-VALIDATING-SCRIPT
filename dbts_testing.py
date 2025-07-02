@@ -1,96 +1,102 @@
 import requests
 import json
+import logging
+from datetime import datetime
 from opik import Opik, track
 from opik.evaluation import evaluate
-from opik.evaluation.metrics import Equals, Hallucination, AnswerRelevance, Moderation
-from opik.integrations.openai import track_openai
+from opik.evaluation.metrics import Hallucination
 from custom_modules import GenericCompatibleModel
-from datetime import datetime
-from langchain_community.agent_toolkits import SQLDatabaseToolkit, SparkSQLToolkit
 
-time = datetime.now().strftime("%H:%M:%S")
+logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
+time_now = datetime.now().strftime("%H:%M:%S")
 
-
-class LLMTestingClient:
-    API_ENDPOINTS = {
-        "login": "https://vistaai-dev-api.dtskill.com/api/auth/login",
-    }
-
-    def __init__(self, scenario_id):
+class DBTSEvaluator:
+    def __init__(self, scenario_id, email, password):
         self.token = None
         self.scenario_id = scenario_id
-        self.client = Opik()
+        self.email = email
+        self.password = password
+        self.login_url = "https://vistaai-dev-api.dtskill.com/api/auth/login"
+        self.workspace_name = "v-partha-sarathi"
+
+        self.client = Opik(workspace=self.workspace_name)
+
         self.dataset = self.client.get_or_create_dataset(
-            name="DBTS Evaluation Dataset", description="Dataset for evaluating DBTS scenarios")
-        self.hallucination_metric = Hallucination(model=GenericCompatibleModel(
-            model_name="llama3-70b-8192", api_key="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", model_provider="groq"))
-        self.answerRelevance_metric = AnswerRelevance(model=GenericCompatibleModel(
-            model_name="llama3-70b-8192", api_key="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", model_provider="groq"))
+            name="DBTS Updated Evaluation",
+            description="Dataset for evaluating DBTS with gold questions"
+        )
 
-    def login(self, email, password):
-        payload = {
-            "email": email,
-            "password": password
-        }
-        self.token = self.make_api_request(
-            "POST", "login", payload).get("token")
+        self.hallucination_metric = Hallucination(
+            model=GenericCompatibleModel(
+                model_name="llama3-70b-8192",
+                api_key="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",
+                model_provider="groq"
+            )
+        )
 
-    def make_api_request(self, request_method, api_name, payload=None, custom_url=None):
-        url = custom_url if custom_url else self.API_ENDPOINTS[api_name]
+    def login(self):
+        payload = {"email": self.email, "password": self.password}
         headers = {
-            'X-Frontend-Domain': 'https://vistaai-dev.dtskill.com',
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
+            'X-Frontend-Domain': 'https://vistaai-dev.dtskill.com'
         }
-        if api_name != "login":
-            headers['X-Cluster-ID'] = '49c3b59a-814e-4906-8d91-a2161798b3bb'
-            headers['Authorization'] = f"Bearer {self.token}"
-
-        if request_method.upper() == "GET":
-            response = requests.request(
-                url=url, method=request_method, headers=headers)
-        else:
-            data = json.dumps(payload) if payload else None
-            print(f"payload for {api_name} is {data}")
-            response = requests.request(
-                url=url, method=request_method, headers=headers, data=data)
-
-        print(f"Response for {api_name}: {response.text}")
-        return response.json()
+        response = requests.post(self.login_url, headers=headers, data=json.dumps(payload))
+        response.raise_for_status()
+        self.token = response.json().get("token")
+        logging.info("Login successful.")
 
     @track
     def evaluation_task(self, x):
-        # DBTS conversation endpoint
-        url = f"https://vistaai-dev-api.dtskill.com/api/vista_ai_services/dbts/conversation/{self.scenario_id}/"
-        payload = {"user_response": x['input'], "model": "llama3-70b-8192"}
+        question = x.get("question", "")
+
+        logging.info(f"Calling model with: {json.dumps({'query': question})}")
+
+        model_response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers={
+                "Authorization": "Bearer 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",
+                "Content-Type": "application/json"
+            },
+            json={
+                "model": "llama3-70b-8192",
+                "messages": [{"role": "user", "content": question}]
+            }
+        )
+
+        try:
+            response_data = model_response.json()
+            user_answer = response_data['choices'][0]['message']['content']
+        except Exception as e:
+            logging.error(f"Error parsing model response: {e}")
+            user_answer = "Invalid response"
+
         return {
-            "output": self.make_api_request("POST", "", payload, custom_url=url)
+            "input": question,
+            "output": user_answer
         }
 
-#    def add_samples(self):
-        samples = [
-            {"input": "My pizza is late, what happened?"},
-            {"input": "When will my order arrive?"},
-            {"input": "I want to complain about a late delivery."}
-        ]
-        if hasattr(self.dataset, "add_samples"):
-            self.dataset.add_samples(samples)
-        else:
-            print("Your Opik Dataset object does not support adding samples programmatically. Please add samples via the Opik UI.")
-
     def evaluate_data(self):
-        evaluation = evaluate(
+        logging.info("Starting evaluation...")
+        evaluate(
             dataset=self.dataset,
             task=self.evaluation_task,
             scoring_metrics=[self.hallucination_metric],
+            scoring_key_mapping={
+                "input": "input",
+                "output": "output",
+                "reference": "correct_answer"
+            },
             task_threads=1,
-            project_name=f"DBTS Evaluation - Scenario {self.scenario_id}",
-            experiment_name=time
+            project_name=f"DBTS Updated Evaluation {self.scenario_id}",
+            experiment_name=time_now
         )
 
-
 if __name__ == "__main__":
-    client = LLMTestingClient(
-        scenario_id="603937b4-d5b8-4d04-86d7-a59ddcd97f1d")
-    client.login(email="parthuprince112@gmail.com", password="mkml")
-#    client.add_samples()
+    client = DBTSEvaluator(
+        scenario_id="0f1b2e27-8935-4d03-8c13-d7ca309d4c1e",
+        email="parthuprince112@gmail.com",
+        password="mkml"
+    )
+    client.login()
     client.evaluate_data()
+
