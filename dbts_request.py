@@ -6,7 +6,6 @@ from pathlib import Path
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
 
-
 class DBTSClient:
     API_ENDPOINTS = {
         "login": "https://vistaai-dev-api.dtskill.com/api/auth/login",
@@ -71,21 +70,18 @@ class DBTSClient:
             if not Path(file_path).exists():
                 raise FileNotFoundError(f"File not found: {file_path}")
             with open(file_path, "rb") as f:
-                filename = Path(file_path).name
-                files = {"document": (filename, f)}  # ✅ must use 'document' as key
+                files = {"document": f}
                 data = {"name": name}
                 headers = {
                     'X-Frontend-Domain': self.domain,
                     'X-Cluster-ID': self.cluster_id,
                     'Authorization': f"Bearer {self.token}"
                 }
-                response = requests.post(
-                    self.API_ENDPOINTS["document_create"], headers=headers, files=files, data=data
-                )
-                print("Document upload response:", response.text)
+                response = requests.post(self.API_ENDPOINTS["document_create"], headers=headers, files=files, data=data)
+                logging.info("Document upload response: %s", response.text)
                 response.raise_for_status()
-                created_doc = response.json()
-                self.document_id = created_doc.get("document", {}).get("id")
+                created_doc = response.json()["document"]
+                self.document_id = created_doc.get("id")
                 logging.info(f"Document created with ID: {self.document_id}")
 
     def get_or_create_scenario(self, name="Python_Tutorials_1", number_of_questions=3, score_per_question=2):
@@ -100,22 +96,19 @@ class DBTSClient:
             logging.info("Creating new scenario...")
             payload = {
                 "name": name,
-                "document": self.document_id,
+                "document_id": self.document_id,
                 "number_of_questions": number_of_questions,
                 "score_per_question": score_per_question,
-                "topics": [],
+                "topics": ["machine learning", "popular algorithms"],
                 "scenario_type": "multiple_choice",
-                "level": "Default"
+                "level": "intermediate"
             }
 
-            logging.debug(f"Scenario payload: {json.dumps(payload, indent=2)}")
             created = self.make_api_request("POST", "scenario_create", payload)
-
-            if not created or "id" not in created:
+            if not created or "scenario" not in created:
                 logging.error("Scenario creation failed. Response: %s", created)
                 raise Exception("Failed to create scenario. Check payload or server.")
-            
-            self.scenario_id = created["id"]
+            self.scenario_id = created["scenario"]["id"]
             logging.info(f"Scenario created with ID: {self.scenario_id}")
 
     def assign_users_to_scenario(self, user_list):
@@ -124,13 +117,11 @@ class DBTSClient:
             raise ValueError("Document or Scenario not initialized.")
         url = f"https://vistaai-dev-api.dtskill.com/api/vista_ai_services/dbts/scenario/{self.scenario_id}/assign-users/"
         payload = {
-            "users": user_list,
+            "user_ids": user_list,
             "document_id": self.document_id
         }
         self.make_api_request("POST", "", payload, custom_url=url)
         logging.info("Users assigned to scenario.")
-
-
 
 if __name__ == "__main__":
     client = DBTSClient()
@@ -138,22 +129,15 @@ if __name__ == "__main__":
 
     client.get_or_create_document(
         name="DBTS_Testing_Document1",
-        file_path=r"C:\Users\parth\Desktop\Machine Learning.pdf"
+        file_path=r"C:\\Users\\parth\\Documents\\Downloads\\Sets - Assignments.pdf"
     )
 
-    try:
-        client.get_or_create_scenario(
-            name="Python_Tutorials_2",
-            number_of_questions=3,
-            score_per_question=2
-        )
-    except Exception as e:
-        logging.error("Scenario creation failed. Skipping user assignment.")
-        exit(1)
+    client.get_or_create_scenario(
+        name="Python_Tutorials_1",
+        number_of_questions=3,
+        score_per_question=2
+    )
 
-    if client.document_id and client.scenario_id:
-        client.assign_users_to_scenario(
-            user_list=["95b6de82-c989-4ae7-936b-700c49290097"]
-        )
-    else:
-        logging.error("Document or Scenario ID missing. Cannot assign users.")
+    client.assign_users_to_scenario(
+        user_list=["95b6de82-c989-4ae7-936b-700c49290097"]
+    )
