@@ -3,7 +3,8 @@ from typing import Any
 
 from opik.evaluation.models import OpikBaseModel
 from langchain.chat_models import init_chat_model
-from opik.integrations.openai import track_openai  # Optional: used if OpenAI needs tracking
+# Optional: used if OpenAI needs tracking
+from opik.integrations.openai import track_openai
 
 
 class GenericCompatibleModel(OpikBaseModel):

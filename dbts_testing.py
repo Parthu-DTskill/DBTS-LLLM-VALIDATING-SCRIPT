@@ -7,8 +7,10 @@ from opik.evaluation import evaluate
 from opik.evaluation.metrics import Hallucination
 from custom_modules import GenericCompatibleModel
 
-logging.basicConfig(level=logging.INFO, format='%(asctime)s | %(levelname)s | %(message)s')
+logging.basicConfig(level=logging.INFO,
+                    format='%(asctime)s | %(levelname)s | %(message)s')
 time_now = datetime.now().strftime("%H:%M:%S")
+
 
 class DBTSEvaluator:
     def __init__(self, scenario_id, email, password):
@@ -40,7 +42,8 @@ class DBTSEvaluator:
             'Content-Type': 'application/json',
             'X-Frontend-Domain': 'https://vistaai-dev.dtskill.com'
         }
-        response = requests.post(self.login_url, headers=headers, data=json.dumps(payload))
+        response = requests.post(
+            self.login_url, headers=headers, data=json.dumps(payload))
         response.raise_for_status()
         self.token = response.json().get("token")
         logging.info("Login successful.")
@@ -91,6 +94,7 @@ class DBTSEvaluator:
             experiment_name=time_now
         )
 
+
 if __name__ == "__main__":
     client = DBTSEvaluator(
         scenario_id="0f1b2e27-8935-4d03-8c13-d7ca309d4c1e",
@@ -99,4 +103,3 @@ if __name__ == "__main__":
     )
     client.login()
     client.evaluate_data()
-
