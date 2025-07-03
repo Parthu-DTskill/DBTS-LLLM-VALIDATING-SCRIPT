@@ -1,12 +1,8 @@
 import requests
 from typing import Any
-
 from opik.evaluation.models import OpikBaseModel
 from langchain.chat_models import init_chat_model
-# Optional: used if OpenAI needs tracking
 from opik.integrations.openai import track_openai
-
-
 class GenericCompatibleModel(OpikBaseModel):
     def __init__(self, model_name: str, api_key: str, model_provider: str):
         super().__init__(model_name)
